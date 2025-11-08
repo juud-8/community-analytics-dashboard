@@ -1,13 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { MetricsCard } from './MetricsCard';
+import { Header } from './Header';
+import { KPICard } from './KPICard';
+import { DateRangeSelector } from './DateRangeSelector';
+import { EmptyState, DashboardSkeleton } from './EmptyState';
 import { MemberGrowthChart } from './MemberGrowthChart';
 import { RevenueChart } from './RevenueChart';
 import { RevenueByProductChart } from './RevenueByProductChart';
 import { EngagementHeatmap } from './EngagementHeatmap';
 import { ExportButton } from './ExportButton';
-import { Users, DollarSign, TrendingUp, Activity, RefreshCw, AlertCircle } from 'lucide-react';
+import { Users, DollarSign, TrendingUp, Activity, RefreshCw, AlertCircle, Target, Zap } from 'lucide-react';
 import { Button } from './ui/button';
 import { formatCurrency, formatNumber, formatPercentage } from '@/lib/utils';
 import type {
@@ -32,6 +35,7 @@ export function Dashboard({ companyId, initialDateRange = '30d' }: DashboardProp
   const [heatmapData, setHeatmapData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   useEffect(() => {
     loadAnalytics();
@@ -69,6 +73,8 @@ export function Dashboard({ companyId, initialDateRange = '30d' }: DashboardProp
       if (revenueDataRes.success) setRevenueData(revenueDataRes.data);
       if (productsData.success) setProductPerformance(productsData.data);
       if (heatmapDataRes.success) setHeatmapData(heatmapDataRes.data);
+
+      setLastUpdated(new Date());
     } catch (error) {
       console.error('Failed to load analytics:', error);
       setError(error instanceof Error ? error.message : 'Failed to load analytics data');
@@ -77,146 +83,200 @@ export function Dashboard({ companyId, initialDateRange = '30d' }: DashboardProp
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading analytics...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center max-w-md">
-          <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">Failed to Load Analytics</h3>
-          <p className="text-muted-foreground mb-4">{error}</p>
-          <Button onClick={loadAnalytics} variant="outline">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Retry
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  // Generate sparkline data from member growth
+  const memberTrend = memberGrowth.slice(-7).map(d => d.totalMembers);
+  const revenueTrend = revenueData.slice(-7).map(d => d.revenue);
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Analytics Dashboard</h1>
-          <p className="text-muted-foreground">
-            Monitor your community performance and growth
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={loadAnalytics} variant="outline" size="sm" disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          <ExportButton companyId={companyId} type="all" label="Export Data" />
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+      {/* Animated gradient background overlay */}
+      <div className="fixed inset-0 bg-gradient-to-br from-blue-600/5 via-purple-600/5 to-pink-600/5 dark:from-blue-600/10 dark:via-purple-600/10 dark:to-pink-600/10 pointer-events-none" />
+
+      {/* Noise texture for depth */}
+      <div className="fixed inset-0 opacity-[0.015] dark:opacity-[0.03] pointer-events-none"
+           style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 400 400\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noiseFilter\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noiseFilter)\'/%3E%3C/svg%3E")' }}
+      />
+
+      {/* Content */}
+      <div className="relative">
+        <Header companyName="Community Analytics" lastUpdated={lastUpdated} />
+
+        <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {isLoading ? (
+            <DashboardSkeleton />
+          ) : error ? (
+            <div className="flex items-center justify-center min-h-[60vh]">
+              <EmptyState
+                title="Failed to Load Analytics"
+                description={error}
+                icon={AlertCircle}
+                actionLabel="Retry"
+                onAction={loadAnalytics}
+                variant="error"
+              />
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {/* Page Header with Actions */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 animate-slide-down">
+                <div>
+                  <h2 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
+                    Analytics Overview
+                  </h2>
+                  <p className="text-slate-600 dark:text-slate-400 mt-2">
+                    Monitor your community performance and growth metrics
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={loadAnalytics}
+                    variant="outline"
+                    size="sm"
+                    disabled={isLoading}
+                    className="glass border-slate-200 dark:border-slate-800"
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                  <ExportButton companyId={companyId} type="all" label="Export Data" />
+                </div>
+              </div>
+
+              {/* Date Range Selector */}
+              <div className="animate-slide-up stagger-1">
+                <DateRangeSelector
+                  value={dateRange}
+                  onChange={(range) => setDateRange(range)}
+                />
+              </div>
+
+              {/* Key Metrics Grid - Premium KPI Cards */}
+              {metrics && (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <KPICard
+                    title="Total Members"
+                    value={formatNumber(metrics.totalMembers)}
+                    description="from all time"
+                    change={metrics.growthRate}
+                    changeLabel="vs last period"
+                    icon={<Users className="h-5 w-5" />}
+                    trend={memberTrend}
+                    color="blue"
+                    tooltip="Total number of community members across all time"
+                    className="animate-slide-up stagger-1"
+                  />
+                  <KPICard
+                    title="Total Revenue"
+                    value={formatCurrency(metrics.totalRevenue)}
+                    description="all time revenue"
+                    icon={<DollarSign className="h-5 w-5" />}
+                    trend={revenueTrend}
+                    color="green"
+                    tooltip="Total revenue generated from all members"
+                    className="animate-slide-up stagger-2"
+                  />
+                  <KPICard
+                    title="Active Members"
+                    value={formatNumber(metrics.activeMembers)}
+                    description={`${formatPercentage((metrics.activeMembers / metrics.totalMembers) * 100)} of total`}
+                    icon={<Activity className="h-5 w-5" />}
+                    color="purple"
+                    tooltip="Members who have been active in the last 30 days"
+                    className="animate-slide-up stagger-3"
+                  />
+                  <KPICard
+                    title="Churn Rate"
+                    value={formatPercentage(metrics.churnRate)}
+                    description={`${metrics.churnedMembers} churned`}
+                    change={-metrics.churnRate}
+                    changeLabel="vs last period"
+                    icon={<TrendingUp className="h-5 w-5" />}
+                    color="orange"
+                    tooltip="Percentage of members who left in the selected period"
+                    className="animate-slide-up stagger-4"
+                  />
+                </div>
+              )}
+
+              {/* Charts Section */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="animate-slide-up stagger-5">
+                  <MemberGrowthChart data={memberGrowth} />
+                </div>
+                <div className="animate-slide-up stagger-6">
+                  <RevenueChart data={revenueData} />
+                </div>
+              </div>
+
+              {/* Revenue by Product */}
+              {productPerformance.length > 0 ? (
+                <div className="animate-slide-up stagger-7">
+                  <RevenueByProductChart data={productPerformance} />
+                </div>
+              ) : (
+                <div className="animate-slide-up stagger-7">
+                  <EmptyState
+                    title="No Product Data"
+                    description="Product performance data will appear here once available."
+                    icon={Target}
+                    variant="no-data"
+                  />
+                </div>
+              )}
+
+              {/* Engagement Heatmap */}
+              {heatmapData.length > 0 ? (
+                <div className="animate-slide-up stagger-8">
+                  <EngagementHeatmap data={heatmapData} />
+                </div>
+              ) : (
+                <div className="animate-slide-up stagger-8">
+                  <EmptyState
+                    title="No Engagement Data"
+                    description="Engagement heatmap will appear here once members start interacting."
+                    icon={Zap}
+                    variant="no-data"
+                  />
+                </div>
+              )}
+
+              {/* Additional Metrics */}
+              {metrics && (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  <KPICard
+                    title="MRR"
+                    value={formatCurrency(metrics.monthlyRecurringRevenue)}
+                    description="Monthly Recurring Revenue"
+                    icon={<DollarSign className="h-5 w-5" />}
+                    color="green"
+                    tooltip="Predictable monthly revenue from subscriptions"
+                    className="animate-slide-up stagger-9"
+                  />
+                  <KPICard
+                    title="Average LTV"
+                    value={formatCurrency(metrics.averageLifetimeValue)}
+                    description="Lifetime Value per Member"
+                    icon={<TrendingUp className="h-5 w-5" />}
+                    color="purple"
+                    tooltip="Average total revenue expected from each member"
+                    className="animate-slide-up stagger-10"
+                  />
+                  <KPICard
+                    title="Growth Rate"
+                    value={formatPercentage(metrics.growthRate)}
+                    description="Month over month"
+                    change={metrics.growthRate}
+                    icon={<Activity className="h-5 w-5" />}
+                    color="blue"
+                    tooltip="Member growth rate compared to previous period"
+                    className="animate-slide-up stagger-11"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </main>
       </div>
-
-      {/* Date Range Selector */}
-      <div className="flex gap-2">
-        {(['7d', '30d', '90d', '1y', 'all'] as DateRange[]).map((range) => (
-          <button
-            key={range}
-            onClick={() => setDateRange(range)}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              dateRange === range
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-            }`}
-          >
-            {range === '7d' && 'Last 7 Days'}
-            {range === '30d' && 'Last 30 Days'}
-            {range === '90d' && 'Last 90 Days'}
-            {range === '1y' && 'Last Year'}
-            {range === 'all' && 'All Time'}
-          </button>
-        ))}
-      </div>
-
-      {/* Metrics Grid */}
-      {metrics && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <MetricsCard
-            title="Total Members"
-            value={formatNumber(metrics.totalMembers)}
-            description="from all time"
-            change={metrics.growthRate}
-            icon={<Users className="h-4 w-4" />}
-          />
-          <MetricsCard
-            title="Total Revenue"
-            value={formatCurrency(metrics.totalRevenue)}
-            description="all time revenue"
-            icon={<DollarSign className="h-4 w-4" />}
-          />
-          <MetricsCard
-            title="Active Members"
-            value={formatNumber(metrics.activeMembers)}
-            description={`${formatPercentage((metrics.activeMembers / metrics.totalMembers) * 100)} of total`}
-            icon={<Activity className="h-4 w-4" />}
-          />
-          <MetricsCard
-            title="Churn Rate"
-            value={formatPercentage(metrics.churnRate)}
-            description={`${metrics.churnedMembers} churned`}
-            change={-metrics.churnRate}
-            icon={<TrendingUp className="h-4 w-4" />}
-          />
-        </div>
-      )}
-
-      {/* Charts */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <MemberGrowthChart data={memberGrowth} />
-        <RevenueChart data={revenueData} />
-      </div>
-
-      {/* Revenue by Product */}
-      {productPerformance.length > 0 && (
-        <div className="grid gap-4">
-          <RevenueByProductChart data={productPerformance} />
-        </div>
-      )}
-
-      {/* Engagement Heatmap */}
-      {heatmapData.length > 0 && (
-        <div className="grid gap-4">
-          <EngagementHeatmap data={heatmapData} />
-        </div>
-      )}
-
-      {/* Additional Metrics */}
-      {metrics && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <MetricsCard
-            title="MRR"
-            value={formatCurrency(metrics.monthlyRecurringRevenue)}
-            description="Monthly Recurring Revenue"
-          />
-          <MetricsCard
-            title="Average LTV"
-            value={formatCurrency(metrics.averageLifetimeValue)}
-            description="Lifetime Value per Member"
-          />
-          <MetricsCard
-            title="Growth Rate"
-            value={formatPercentage(metrics.growthRate)}
-            description="Month over month"
-            change={metrics.growthRate}
-          />
-        </div>
-      )}
     </div>
   );
 }
