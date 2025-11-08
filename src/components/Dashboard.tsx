@@ -4,15 +4,17 @@ import { useState, useEffect } from 'react';
 import { MetricsCard } from './MetricsCard';
 import { MemberGrowthChart } from './MemberGrowthChart';
 import { RevenueChart } from './RevenueChart';
-import { EngagementChart } from './EngagementChart';
+import { RevenueByProductChart } from './RevenueByProductChart';
+import { EngagementHeatmap } from './EngagementHeatmap';
 import { ExportButton } from './ExportButton';
-import { Users, DollarSign, TrendingUp, Activity } from 'lucide-react';
+import { Users, DollarSign, TrendingUp, Activity, RefreshCw, AlertCircle } from 'lucide-react';
+import { Button } from './ui/button';
 import { formatCurrency, formatNumber, formatPercentage } from '@/lib/utils';
 import type {
   AnalyticsMetrics,
   MemberGrowthData,
   RevenueData,
-  EngagementData,
+  ProductPerformance,
   DateRange,
 } from '@/types';
 
@@ -26,8 +28,10 @@ export function Dashboard({ companyId, initialDateRange = '30d' }: DashboardProp
   const [metrics, setMetrics] = useState<AnalyticsMetrics | null>(null);
   const [memberGrowth, setMemberGrowth] = useState<MemberGrowthData[]>([]);
   const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
-  const [engagementData, setEngagementData] = useState<EngagementData[]>([]);
+  const [productPerformance, setProductPerformance] = useState<ProductPerformance[]>([]);
+  const [heatmapData, setHeatmapData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadAnalytics();
@@ -36,28 +40,38 @@ export function Dashboard({ companyId, initialDateRange = '30d' }: DashboardProp
   const loadAnalytics = async () => {
     try {
       setIsLoading(true);
+      setError(null);
 
       // Fetch all analytics data in parallel
-      const [metricsRes, growthRes, revenueRes, engagementRes] = await Promise.all([
+      const [metricsRes, growthRes, revenueRes, productsRes, heatmapRes] = await Promise.all([
         fetch(`/api/analytics/metrics?companyId=${companyId}&dateRange=${dateRange}`),
         fetch(`/api/analytics/members?companyId=${companyId}&dateRange=${dateRange}`),
         fetch(`/api/analytics/revenue?companyId=${companyId}&dateRange=${dateRange}`),
-        fetch(`/api/analytics/engagement?companyId=${companyId}&dateRange=${dateRange}`),
+        fetch(`/api/analytics/products?companyId=${companyId}&dateRange=${dateRange}`),
+        fetch(`/api/analytics/heatmap?companyId=${companyId}&dateRange=${dateRange}`),
       ]);
 
-      const [metricsData, growthData, revenueDataRes, engagementDataRes] = await Promise.all([
+      // Check for HTTP errors
+      if (!metricsRes.ok || !growthRes.ok || !revenueRes.ok) {
+        throw new Error('Failed to fetch analytics data');
+      }
+
+      const [metricsData, growthData, revenueDataRes, productsData, heatmapDataRes] = await Promise.all([
         metricsRes.json(),
         growthRes.json(),
         revenueRes.json(),
-        engagementRes.json(),
+        productsRes.ok ? productsRes.json() : { success: true, data: [] },
+        heatmapRes.ok ? heatmapRes.json() : { success: true, data: [] },
       ]);
 
       if (metricsData.success) setMetrics(metricsData.data);
       if (growthData.success) setMemberGrowth(growthData.data);
       if (revenueDataRes.success) setRevenueData(revenueDataRes.data);
-      if (engagementDataRes.success) setEngagementData(engagementDataRes.data);
+      if (productsData.success) setProductPerformance(productsData.data);
+      if (heatmapDataRes.success) setHeatmapData(heatmapDataRes.data);
     } catch (error) {
       console.error('Failed to load analytics:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load analytics data');
     } finally {
       setIsLoading(false);
     }
@@ -74,17 +88,39 @@ export function Dashboard({ companyId, initialDateRange = '30d' }: DashboardProp
     );
   }
 
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center max-w-md">
+          <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+          <h3 className="text-lg font-semibold mb-2">Failed to Load Analytics</h3>
+          <p className="text-muted-foreground mb-4">{error}</p>
+          <Button onClick={loadAnalytics} variant="outline">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Analytics Dashboard</h1>
           <p className="text-muted-foreground">
             Monitor your community performance and growth
           </p>
         </div>
-        <ExportButton companyId={companyId} type="all" label="Export All Data" />
+        <div className="flex gap-2">
+          <Button onClick={loadAnalytics} variant="outline" size="sm" disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <ExportButton companyId={companyId} type="all" label="Export Data" />
+        </div>
       </div>
 
       {/* Date Range Selector */}
@@ -146,9 +182,19 @@ export function Dashboard({ companyId, initialDateRange = '30d' }: DashboardProp
         <RevenueChart data={revenueData} />
       </div>
 
-      <div className="grid gap-4">
-        <EngagementChart data={engagementData} />
-      </div>
+      {/* Revenue by Product */}
+      {productPerformance.length > 0 && (
+        <div className="grid gap-4">
+          <RevenueByProductChart data={productPerformance} />
+        </div>
+      )}
+
+      {/* Engagement Heatmap */}
+      {heatmapData.length > 0 && (
+        <div className="grid gap-4">
+          <EngagementHeatmap data={heatmapData} />
+        </div>
+      )}
 
       {/* Additional Metrics */}
       {metrics && (
